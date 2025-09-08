@@ -30,6 +30,7 @@ class ToolBeltMainWindow(QMainWindow):
         from modules.ip_trace_tool import IPTraceTool
         from modules.matrix_rain_tab import FunToolsTab
         from modules.system_info_tab import SystemInfoTab
+        from modules.terminal_emulator import TerminalEmulator
         self.system_info_tab = SystemInfoTab()
         self.tabs.addTab(self.system_info_tab, "System Info")
         self.ssh_tool = SSHTool()
@@ -40,6 +41,8 @@ class ToolBeltMainWindow(QMainWindow):
         self.tabs.addTab(self.domain_lookup_tool, "Domain Lookup")
         self.ip_trace_tool = IPTraceTool()
         self.tabs.addTab(self.ip_trace_tool, "IP Trace")
+        self.terminal_emulator = TerminalEmulator()
+        self.tabs.addTab(self.terminal_emulator, "Terminal")
         self.fun_tools_tab = FunToolsTab(main_window=self)
         self.tabs.addTab(self.fun_tools_tab, "Fun Tools")
         apply_oled_theme(self)
