@@ -90,13 +90,18 @@ class MatrixRainSettingsDialog(QDialog):
         speed_row.addWidget(self.speed_spin)
         layout.addLayout(speed_row)
 
-        # Strand Length
+        # Strand Length (min/max)
         strand_len_row = QHBoxLayout()
-        strand_len_row.addWidget(QLabel("Strand Length (chars):"))
-        self.strand_len_spin = QSpinBox()
-        self.strand_len_spin.setRange(2, 100)
-        self.strand_len_spin.setValue(self.settings.get('strand_length', 20))
-        strand_len_row.addWidget(self.strand_len_spin)
+        strand_len_row.addWidget(QLabel("Min Strand Length (chars):"))
+        self.strand_min_spin = QSpinBox()
+        self.strand_min_spin.setRange(2, 100)
+        self.strand_min_spin.setValue(self.settings.get('min_strand_length', 8))
+        strand_len_row.addWidget(self.strand_min_spin)
+        strand_len_row.addWidget(QLabel("Max Strand Length (chars):"))
+        self.strand_max_spin = QSpinBox()
+        self.strand_max_spin.setRange(2, 100)
+        self.strand_max_spin.setValue(self.settings.get('max_strand_length', 20))
+        strand_len_row.addWidget(self.strand_max_spin)
         layout.addLayout(strand_len_row)
 
         # Strand Lifetime
@@ -132,7 +137,8 @@ class MatrixRainSettingsDialog(QDialog):
         return {
             'font_size': self.font_size_spin.value(),
             'speed': self.speed_spin.value(),
-            'strand_length': self.strand_len_spin.value(),
+            'min_strand_length': self.strand_min_spin.value(),
+            'max_strand_length': self.strand_max_spin.value(),
             'strand_lifetime': self.strand_spin.value(),
             'chars': self.chars_edit.text(),
             'bg_color': (

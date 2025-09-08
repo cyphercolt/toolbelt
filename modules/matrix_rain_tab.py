@@ -19,17 +19,19 @@ class MatrixRainWidget(QWidget):
     def apply_settings(self, settings):
         self.settings = settings
         self.font_size = self.settings.get('font_size', 18)
-        self.strand_length = self.settings.get('strand_length', 20)
+        self.min_strand_length = self.settings.get('min_strand_length', 8)
+        self.max_strand_length = self.settings.get('max_strand_length', 20)
         self.strand_lifetime = self.settings.get('strand_lifetime', 100)
         self.chars = self.settings.get('chars', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%&*')
-        self.bg_color = self.settings.get('bg_color', (10, 20, 10))
+        self.bg_color = self.settings.get('bg_color', (0, 0, 0))
         self.setFont(QFont('Consolas', self.font_size, QFont.Weight.Bold))
 
     def init_columns(self):
         width = self.width()
         self.n_cols = width // self.font_size
-        # Strands start above the window and go well past the bottom
-        self.max_strand_height = (self.height() // self.font_size) + self.strand_length
+        # Each column gets a random strand length between min and max
+        self.strand_lengths = [random.randint(self.min_strand_length, self.max_strand_length) for _ in range(self.n_cols)]
+        self.max_strand_height = (self.height() // self.font_size) + max(self.strand_lengths or [self.max_strand_length])
         self.columns = [random.randint(0, self.max_strand_height) for _ in range(self.n_cols)]
         self.column_ages = [0 for _ in range(self.n_cols)]
 
@@ -42,10 +44,13 @@ class MatrixRainWidget(QWidget):
             if self.column_ages[i] >= self.strand_lifetime or self.columns[i] > self.max_strand_height:
                 self.columns[i] = 0
                 self.column_ages[i] = 0
+                # Pick a new random strand length for this column
+                self.strand_lengths[i] = random.randint(self.min_strand_length, self.max_strand_length)
             else:
                 if random.random() > 0.975:
                     self.columns[i] = 0
                     self.column_ages[i] = 0
+                    self.strand_lengths[i] = random.randint(self.min_strand_length, self.max_strand_length)
                 else:
                     self.columns[i] += 1
                     self.column_ages[i] += 1
@@ -57,18 +62,16 @@ class MatrixRainWidget(QWidget):
         painter.setFont(self.font())
         for i, y in enumerate(self.columns):
             x = i * self.font_size
-            # Only draw up to strand_length characters per column, ending at the current head
-            for idx, j in enumerate(range(max(0, y - self.strand_length), y)):
+            strand_len = self.strand_lengths[i] if hasattr(self, 'strand_lengths') else self.max_strand_length
+            for idx, j in enumerate(range(max(0, y - strand_len), y)):
                 if j * self.font_size > self.height():
                     continue
                 char = random.choice(self.chars)
-                # Calculate fade based on position in strand
                 pos_in_strand = y - j - 1  # 0 is head, increasing toward tail
                 if pos_in_strand == 0:
                     painter.setPen(QColor(180, 255, 180))
                 else:
-                    # Fade from 255 (head) to 0 (tail) over strand_length
-                    alpha = max(0, int(255 * (1 - pos_in_strand / max(1, self.strand_length-1))))
+                    alpha = max(0, int(255 * (1 - pos_in_strand / max(1, strand_len-1))))
                     painter.setPen(QColor(0, 255, 70, alpha))
                 painter.drawText(x, j * self.font_size, self.font_size, self.font_size, Qt.AlignmentFlag.AlignCenter, char)
 
