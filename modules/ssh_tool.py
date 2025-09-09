@@ -89,10 +89,12 @@ class SSHWorker(QThread):
                     self.os_detected.emit('Windows')
                 else:
                     self.os_detected.emit('Unknown')
+            import time
             while self.running and self.channel and not self.channel.closed:
                 if self.channel.recv_ready():
                     data = self.channel.recv(4096).decode(errors='ignore')
                     self.output.emit(data)
+                time.sleep(0.01)
         except (paramiko.ssh_exception.SSHException, socket.error) as e:
             self.output.emit(f"Connection error: {e}\n")
             self.connected.emit(False)
@@ -101,6 +103,52 @@ class SSHWorker(QThread):
                 self.client.close()
 
 class SSHTool(QWidget):
+    def closeEvent(self, event):
+        # Gracefully stop the SSH worker thread if running
+        if hasattr(self, 'worker') and self.worker is not None:
+            try:
+                self.worker.stop()
+                self.worker.wait(1000)  # Wait up to 1s for thread to finish
+            except Exception:
+                pass
+        event.accept()
+    def open_effects_menu(self):
+        from PyQt6.QtWidgets import QMenu
+        from PyQt6.QtGui import QAction
+        menu = QMenu(self)
+        crt_action = QAction('CRT', self)
+        crt_action.setCheckable(True)
+        crt_action.setChecked(self.effect_crt)
+        scanline_action = QAction('Scanline', self)
+        scanline_action.setCheckable(True)
+        scanline_action.setChecked(self.effect_scanline)
+        glitch_action = QAction('Glitch', self)
+        glitch_action.setCheckable(True)
+        glitch_action.setChecked(self.effect_glitch)
+        shake_action = QAction('Shake', self)
+        shake_action.setCheckable(True)
+        shake_action.setChecked(self.effect_shake)
+        def toggle_crt():
+            self.effect_crt = not self.effect_crt
+            self.update_terminal_effects()
+        def toggle_scanline():
+            self.effect_scanline = not self.effect_scanline
+            self.update_terminal_effects()
+        def toggle_glitch():
+            self.effect_glitch = not self.effect_glitch
+            self.update_terminal_effects()
+        def toggle_shake():
+            self.effect_shake = not self.effect_shake
+            self.update_terminal_effects()
+        crt_action.triggered.connect(toggle_crt)
+        scanline_action.triggered.connect(toggle_scanline)
+        glitch_action.triggered.connect(toggle_glitch)
+        shake_action.triggered.connect(toggle_shake)
+        menu.addAction(crt_action)
+        menu.addAction(scanline_action)
+        menu.addAction(glitch_action)
+        menu.addAction(shake_action)
+        menu.exec(self.effects_btn.mapToGlobal(self.effects_btn.rect().bottomLeft()))
     def set_connected(self, ok):
         self.connected = ok
         self.input_line.setEnabled(ok)
@@ -178,18 +226,36 @@ class SSHTool(QWidget):
         super().keyPressEvent(event)
 
     def __init__(self, parent=None):
+        # Initialize effect overlay/timer attributes
+        self._scanline_overlay = None
+        self._crt_overlay = None
+        self._glitch_timer = None
+        self._shake_timer = None
+        # Initialize effect state variables before any usage
+        self.effect_crt = False
+        self.effect_scanline = False
+        self.effect_glitch = False
+        self.effect_shake = False
         super().__init__(parent)
         from PyQt6.QtCore import QTimer
         layout = QVBoxLayout()
-        self.ssh_btn = QPushButton("SSH Connect")
-        self.ssh_btn.clicked.connect(self.open_ssh_dialog)
-        layout.addWidget(self.ssh_btn)
+    # Remove SSH Connect button from top, will be placed under input
         self.os_label = QLabel("Not connected")
         layout.addWidget(self.os_label)
+        # Terminal
         self.terminal = QTextEdit()
         self.terminal.setReadOnly(True)
         self.terminal.setPlaceholderText("SSH Output...")
         layout.addWidget(self.terminal)
+
+        # Effects button row (bottom left)
+        bottom_row = QHBoxLayout()
+        self.effects_btn = QPushButton('Effects')
+        self.effects_btn.clicked.connect(self.open_effects_menu)
+        bottom_row.addWidget(self.effects_btn)
+        bottom_row.addStretch(1)
+        layout.addLayout(bottom_row)
+
         # Use custom InputLine for command history navigation
         def get_history():
             return self.command_history
@@ -201,6 +267,7 @@ class SSHTool(QWidget):
         self.input_line.setPlaceholderText("Type command and press Enter...")
         self.input_line.returnPressed.connect(self.on_send_command)
         layout.addWidget(self.input_line)
+
         self.worker = None
         self.connected = False
         self.command_history = []
@@ -208,10 +275,102 @@ class SSHTool(QWidget):
         self.setLayout(layout)
         self.setMinimumSize(700, 400)
         # Terminal output buffer and timer for batching
+        from PyQt6.QtCore import QTimer
         self._output_buffer = []
         self._output_timer = QTimer(self)
         self._output_timer.setInterval(50)  # ms, adjust as needed
         self._output_timer.timeout.connect(self._flush_terminal_output)
+        # Effects state
+        self.effect_crt = False
+        self.effect_scanline = False
+        self.effect_glitch = False
+        # Effects and SSH Connect button row (under input)
+        button_row = QHBoxLayout()
+        self.effects_btn = QPushButton('Effects')
+        self.effects_btn.setFixedWidth(90)
+        self.effects_btn.clicked.connect(self.open_effects_menu)
+        button_row.addWidget(self.effects_btn)
+        self.ssh_btn = QPushButton("SSH Connect")
+        self.ssh_btn.setFixedWidth(110)
+        self.ssh_btn.clicked.connect(self.open_ssh_dialog)
+        button_row.addWidget(self.ssh_btn)
+        button_row.addStretch(1)
+        layout.addLayout(button_row)
+
+    def update_terminal_effects(self):
+        # CRT effect: green text, bold font
+        if getattr(self, 'effect_crt', False):
+            self.terminal.setStyleSheet('background: #101014; color: #39ff14; font-family: Consolas; font-size: 14px; font-weight: bold;')
+        else:
+            self.terminal.setStyleSheet('background: #101014; color: #c0c0ff; font-family: Consolas; font-size: 14px;')
+        # Scanline effect: overlay widget with lines
+        from modules.scanline_overlay import ScanlineOverlay
+        if getattr(self, 'effect_scanline', False):
+            if not self._scanline_overlay:
+                self._scanline_overlay = ScanlineOverlay(self.terminal)
+                self._scanline_overlay.setParent(self.terminal.viewport())
+                self._scanline_overlay.raise_()
+            self._scanline_overlay.resize(self.terminal.viewport().size())
+            self._scanline_overlay.show()
+        else:
+            if self._scanline_overlay:
+                self._scanline_overlay.hide()
+        # Glitch effect
+        from PyQt6.QtCore import QTimer
+        import random
+        if getattr(self, 'effect_glitch', False):
+            if not self._glitch_timer:
+                self._glitch_timer = QTimer(self)
+                self._glitch_timer.timeout.connect(self._do_glitch)
+            self._set_next_glitch_interval()
+        else:
+            if self._glitch_timer:
+                self._glitch_timer.stop()
+                self._glitch_timer = None
+            if hasattr(self, '_glitching') and self._glitching:
+                self._restore_terminal_text()
+
+    def _set_next_glitch_interval(self):
+        import random
+        if self._glitch_timer:
+            interval = random.randint(3000, 15000)
+            self._glitch_timer.start(interval)
+            self._glitching = False
+
+    def _do_glitch(self):
+        import random
+        text = self.terminal.toPlainText()
+        if not text.strip():
+            return
+        self._original_text = text
+        scroll_bar = self.terminal.verticalScrollBar()
+        scroll_pos = scroll_bar.value()
+        lines = text.splitlines()
+        glitch_chars = '█▓▒░@#$%&*?!/\\|><~'
+        X = 30
+        start_idx = max(0, len(lines) - X)
+        for _ in range(random.randint(2, 6)):
+            if len(lines) == 0:
+                break
+            line_idx = random.randint(start_idx, len(lines)-1)
+            if not lines[line_idx]:
+                continue
+            char_idx = random.randint(0, len(lines[line_idx])-1)
+            gl = random.choice(glitch_chars)
+            lines[line_idx] = lines[line_idx][:char_idx] + gl + lines[line_idx][char_idx+1:]
+        self.terminal.setPlainText('\n'.join(lines))
+        scroll_bar.setValue(scroll_pos)
+        self._glitching = True
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(120, lambda: self._restore_terminal_text(scroll_pos))
+        self._set_next_glitch_interval()
+
+    def _restore_terminal_text(self, scroll_pos=None):
+        if hasattr(self, '_original_text'):
+            self.terminal.setPlainText(self._original_text)
+            if scroll_pos is not None:
+                self.terminal.verticalScrollBar().setValue(scroll_pos)
+        self._glitching = False
 
     def open_ssh_dialog(self):
         dlg = SSHDialog(self)

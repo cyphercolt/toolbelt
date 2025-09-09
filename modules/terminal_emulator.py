@@ -10,6 +10,28 @@ import subprocess
 from modules.scanline_overlay import ScanlineOverlay
 
 class TerminalEmulator(QWidget):
+    def closeEvent(self, event):
+        # Ensure QProcess is terminated on widget close
+        self.shutdown()
+        event.accept()
+    def shutdown(self):
+        # Forcefully terminate the QProcess if running
+        if hasattr(self, 'process') and self.process is not None:
+            if self.process.state() == QProcess.ProcessState.Running:
+                self.process.terminate()
+                self.process.waitForFinished(1000)
+                if self.process.state() == QProcess.ProcessState.Running:
+                    self.process.kill()
+            self.process.close()
+    def closeEvent(self, event):
+        # Ensure the QProcess is terminated when the terminal is closed
+        if hasattr(self, 'process') and self.process is not None:
+            if self.process.state() == QProcess.ProcessState.Running:
+                self.process.terminate()
+                self.process.waitForFinished(1000)
+                if self.process.state() == QProcess.ProcessState.Running:
+                    self.process.kill()
+        event.accept()
     def update_terminal_effects(self):
         # CRT effect: green text, bold font
         if getattr(self, 'effect_crt', False):

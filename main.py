@@ -4,6 +4,17 @@ from shared.theme import apply_oled_theme
 
 
 class ToolBeltMainWindow(QMainWindow):
+    def closeEvent(self, event):
+        # Ensure all TerminalEmulator tabs are shutdown to clean up QProcess
+        from modules.terminal_emulator import TerminalEmulator
+        for i in range(self.tabs.count()):
+            widget = self.tabs.widget(i)
+            if isinstance(widget, TerminalEmulator):
+                try:
+                    widget.shutdown()
+                except Exception:
+                    pass
+        event.accept()
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Tool Belt")
