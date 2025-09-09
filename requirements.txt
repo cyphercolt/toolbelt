@@ -4,4 +4,4 @@ wmi; platform_system == 'Windows'
 paramiko
 requests
 dnspython
-whois
+python-whois

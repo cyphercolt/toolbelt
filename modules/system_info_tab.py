@@ -239,32 +239,6 @@ class SystemInfoTab(QWidget):
                 self._main_layout.removeWidget(self.batt_card)
                 self.batt_card.setParent(None)
                 # Removed invalid leftover disk widget code
-        # Section: Battery (conditionally shown)
-        self.batt_header = QLabel('Battery')
-        self.batt_header.setFont(QFont('Consolas', 18, QFont.Weight.Bold))
-        self.batt_header.setStyleSheet('color: #7ecfff; padding-bottom: 4px;')
-        self.batt_card = QFrame()
-        self.batt_card.setStyleSheet('background: rgba(30,40,50,0.7); border-radius: 10px; padding: 12px;')
-        self.batt_layout = QHBoxLayout()
-        self.batt_layout.setSpacing(12)
-        self.battery_label = QLabel()
-        self.battery_label.setFont(QFont('Consolas', 14))
-        self.battery_bar = QProgressBar()
-        self.battery_bar.setRange(0, 100)
-        self.battery_bar.setFixedHeight(18)
-        self.battery_bar.setTextVisible(False)
-        self.battery_bar.setStyleSheet('QProgressBar {background: #222; border-radius: 8px;} QProgressBar::chunk {border-radius: 8px;}')
-        self.batt_layout.addWidget(self.battery_label)
-        self.batt_layout.addWidget(self.battery_bar)
-        self.batt_card.setLayout(self.batt_layout)
-        # Add battery widgets later in update_info if present
-        layout.addStretch(1)
-        self.setLayout(layout)
-        self._main_layout = layout  # Save for dynamic widget add/remove
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.update_info)
-        self.timer.start(1000)
-        self.update_info()
 
     def get_gpu_usage(self):
         import sys
