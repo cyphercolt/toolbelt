@@ -75,48 +75,38 @@ class IPTraceTool(QWidget):
         self.update_result_effects()
 
     def open_effects_menu(self):
-        from PyQt6.QtWidgets import QMenu
-        from PyQt6.QtGui import QAction
+        from PyQt6.QtWidgets import QMenu, QWidgetAction, QCheckBox
         from PyQt6.QtCore import QTimer
         menu = QMenu(self)
-        crt_action = QAction('CRT', self, checkable=True)
-        scanline_action = QAction('Scanline', self, checkable=True)
-        glitch_action = QAction('Glitch', self, checkable=True)
-        shake_action = QAction('Shake', self, checkable=True)
-        crt_action.setChecked(self.effect_crt)
-        scanline_action.setChecked(self.effect_scanline)
-        glitch_action.setChecked(self.effect_glitch)
-        shake_action.setChecked(self.effect_shake)
-        def toggle_crt():
-            self.effect_crt = not self.effect_crt
-            self.update_result_effects()
-        def toggle_scanline():
-            self.effect_scanline = not self.effect_scanline
-            self.update_result_effects()
-        def toggle_glitch():
-            self.effect_glitch = not self.effect_glitch
-            self.update_result_effects()
-        def toggle_shake():
-            self.effect_shake = not self.effect_shake
-            if self.effect_shake:
-                if not self._shake_flash_timer:
-                    self._shake_flash_timer = QTimer(self)
-                    self._shake_flash_timer.timeout.connect(self._do_shake_flash)
-                self._set_next_shake_flash_interval()
-            else:
-                if self._shake_flash_timer:
-                    self._shake_flash_timer.stop()
-                    self._shake_flash_timer = None
-            self.update_result_effects()
-        crt_action.triggered.connect(toggle_crt)
-        scanline_action.triggered.connect(toggle_scanline)
-        glitch_action.triggered.connect(toggle_glitch)
-        shake_action.triggered.connect(toggle_shake)
-        menu.addAction(crt_action)
-        menu.addAction(scanline_action)
-        menu.addAction(glitch_action)
-        menu.addAction(shake_action)
-        menu.exec(self.effects_btn.mapToGlobal(self.effects_btn.rect().bottomLeft()))
+
+        def add_effect_checkbox(label, attr):
+            checkbox = QCheckBox(label)
+            checkbox.setChecked(getattr(self, attr))
+            def on_toggle(state):
+                setattr(self, attr, state)
+                if attr == 'effect_shake':
+                    if state:
+                        if not self._shake_flash_timer:
+                            self._shake_flash_timer = QTimer(self)
+                            self._shake_flash_timer.timeout.connect(self._do_shake_flash)
+                        self._set_next_shake_flash_interval()
+                    else:
+                        if self._shake_flash_timer:
+                            self._shake_flash_timer.stop()
+                            self._shake_flash_timer = None
+                self.update_result_effects()
+            checkbox.stateChanged.connect(lambda state: on_toggle(state == 2))
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(checkbox)
+            menu.addAction(action)
+
+        add_effect_checkbox('CRT', 'effect_crt')
+        add_effect_checkbox('Scanline', 'effect_scanline')
+        add_effect_checkbox('Glitch', 'effect_glitch')
+        add_effect_checkbox('Shake', 'effect_shake')
+
+        menu.setStyleSheet('QMenu { background: #222; color: #fff; } QCheckBox { padding: 4px 12px; } QCheckBox::indicator { width: 16px; height: 16px; }')
+        menu.popup(self.effects_btn.mapToGlobal(self.effects_btn.rect().bottomLeft()))
     def _set_next_shake_flash_interval(self):
         from PyQt6.QtCore import QTimer
         import random

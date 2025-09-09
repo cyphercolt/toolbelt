@@ -58,7 +58,11 @@ class SSHWorker(QThread):
 
     def send_command(self, cmd):
         if self.channel and self.channel.send_ready():
-            self.channel.send(cmd + '\n')
+            # Use Windows line ending if remote_os is Windows, else use \n
+            line_ending = '\n'
+            if hasattr(self, 'remote_os') and self.remote_os == 'Windows':
+                line_ending = '\r\n'
+            self.channel.send(cmd + line_ending)
 
     def __init__(self, hostname, username, password):
         super().__init__()
@@ -81,13 +85,26 @@ class SSHWorker(QThread):
             stdin, stdout, stderr = self.client.exec_command('uname -a')
             os_info = stdout.read().decode().strip()
             if os_info:
+                self.remote_os = 'Linux'
                 self.os_detected.emit('Linux')
             else:
                 stdin, stdout, stderr = self.client.exec_command('ver')
                 os_info = stdout.read().decode().strip()
                 if 'Windows' in os_info:
+                    self.remote_os = 'Windows'
                     self.os_detected.emit('Windows')
+                    # Attempt to switch to PowerShell
+                    try:
+                        if self.channel and self.channel.send_ready():
+                            self.channel.send('powershell.exe -NoLogo -NoExit\r\n')
+                            # Send clear command to start with a clean prompt
+                            import time
+                            time.sleep(0.2)  # Give PowerShell a moment to start
+                            self.channel.send('Clear-Host\r\n')
+                    except Exception:
+                        pass
                 else:
+                    self.remote_os = 'Unknown'
                     self.os_detected.emit('Unknown')
             import time
             while self.running and self.channel and not self.channel.closed:
@@ -112,43 +129,40 @@ class SSHTool(QWidget):
             except Exception:
                 pass
         event.accept()
+
     def open_effects_menu(self):
-        from PyQt6.QtWidgets import QMenu
-        from PyQt6.QtGui import QAction
+        from PyQt6.QtWidgets import QMenu, QWidgetAction, QCheckBox
         menu = QMenu(self)
-        crt_action = QAction('CRT', self)
-        crt_action.setCheckable(True)
-        crt_action.setChecked(self.effect_crt)
-        scanline_action = QAction('Scanline', self)
-        scanline_action.setCheckable(True)
-        scanline_action.setChecked(self.effect_scanline)
-        glitch_action = QAction('Glitch', self)
-        glitch_action.setCheckable(True)
-        glitch_action.setChecked(self.effect_glitch)
-        shake_action = QAction('Shake', self)
-        shake_action.setCheckable(True)
-        shake_action.setChecked(self.effect_shake)
-        def toggle_crt():
-            self.effect_crt = not self.effect_crt
-            self.update_terminal_effects()
-        def toggle_scanline():
-            self.effect_scanline = not self.effect_scanline
-            self.update_terminal_effects()
-        def toggle_glitch():
-            self.effect_glitch = not self.effect_glitch
-            self.update_terminal_effects()
-        def toggle_shake():
-            self.effect_shake = not self.effect_shake
-            self.update_terminal_effects()
-        crt_action.triggered.connect(toggle_crt)
-        scanline_action.triggered.connect(toggle_scanline)
-        glitch_action.triggered.connect(toggle_glitch)
-        shake_action.triggered.connect(toggle_shake)
-        menu.addAction(crt_action)
-        menu.addAction(scanline_action)
-        menu.addAction(glitch_action)
-        menu.addAction(shake_action)
-        menu.exec(self.effects_btn.mapToGlobal(self.effects_btn.rect().bottomLeft()))
+
+        def add_effect_checkbox(label, attr):
+            checkbox = QCheckBox(label)
+            checkbox.setChecked(getattr(self, attr))
+            def on_toggle(state):
+                setattr(self, attr, state)
+                self.update_terminal_effects()
+            checkbox.stateChanged.connect(lambda state: on_toggle(state == 2))
+            action = QWidgetAction(menu)
+            action.setDefaultWidget(checkbox)
+            menu.addAction(action)
+
+        add_effect_checkbox('CRT', 'effect_crt')
+        add_effect_checkbox('Scanline', 'effect_scanline')
+        add_effect_checkbox('Glitch', 'effect_glitch')
+        add_effect_checkbox('Shake', 'effect_shake')
+
+        menu.setStyleSheet('QMenu { background: #222; color: #fff; } QCheckBox { padding: 4px 12px; } QCheckBox::indicator { width: 16px; height: 16px; }')
+        menu.popup(self.effects_btn.mapToGlobal(self.effects_btn.rect().bottomLeft()))
+
+    def _effect_toggle(self, effect, checked):
+        if effect == 'crt':
+            self.effect_crt = checked
+        elif effect == 'scanline':
+            self.effect_scanline = checked
+        elif effect == 'glitch':
+            self.effect_glitch = checked
+        elif effect == 'shake':
+            self.effect_shake = checked
+        self.update_terminal_effects()
     def set_connected(self, ok):
         self.connected = ok
         self.input_line.setEnabled(ok)
@@ -156,6 +170,9 @@ class SSHTool(QWidget):
             self.os_label.setText("Connection failed")
     def set_os_label(self, os_name):
         self.os_label.setText(f"Connected: {os_name}")
+        # Store remote OS in the worker for command sending
+        if hasattr(self, 'worker') and self.worker is not None:
+            self.worker.remote_os = os_name
     def append_terminal(self, text):
         # If skipping output after clear, ignore all output for a short period
         if getattr(self, '_skip_output_until', False):
